@@ -138,7 +138,7 @@ onValue(sensorsRef, (snapshot) => {
     opacity: 0.15,           // 全体の透明度（必要に応じて調整）
     surface: { count: 20 },  // 等値面の数
     colorscale: "YlOrRd",
-    reversescale: false,
+    reversescale: true,
   }];
 
   const layout = {
