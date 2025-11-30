@@ -135,9 +135,14 @@ onValue(sensorsRef, (snapshot) => {
     y: ys,
     z: zs,
     value: values,
-    opacity: 0.15,           // 全体の透明度（必要に応じて調整）
-    surface: { count: 20 },  // 等値面の数
-    colorscale: "RdBu",
+    opacity: 0.15,
+    surface: { count: 20 },
+    colorscale: [
+      [0.0, "blue"],      // 低温
+      [0.5, "yellow"],    // 中間
+      [1.0, "red"]        // 高温
+    ],
+    reversescale: false
   }];
 
   const layout = {
