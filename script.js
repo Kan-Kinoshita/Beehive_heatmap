@@ -137,8 +137,8 @@ onValue(sensorsRef, (snapshot) => {
     value: values,
     opacity: 0.15,           // 全体の透明度（必要に応じて調整）
     surface: { count: 20 },  // 等値面の数
-    colorscale: "RdBu",      // 温度スケール（青〜赤）
-    reversescale: true,      // 高温が赤になるよう反転
+    colorscale: "YlOrRd",
+    reversescale: false,
   }];
 
   const layout = {
