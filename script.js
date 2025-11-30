@@ -2,7 +2,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-// ===== あなたの Firebase Config =====
+// ===== Firebase Config =====
 const firebaseConfig = {
   apiKey: "AIzaSyBaEPr5uJFKlTsEAK2AxByxJ6IKSkfmDJ8",
   authDomain: "beehiveheatmap.firebaseapp.com",
@@ -13,24 +13,40 @@ const firebaseConfig = {
   appId: "1:240823308650:web:c3a052cb93d70009295513"
 };
 
-// Firebase 初期化
+// ===== Firebase Init =====
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-
-console.log("Firebase initialized (IDW volume).");
-
-// ===== IDW パラメータ =====
-const GRID_SIZE = 15;   // 15 x 15 x 15
-const POWER_P  = 2;     // d^p の p
-
-// ===== Firebase sensors ノード =====
 const sensorsRef = ref(db, "sensors");
 
-// 3D グリッド用の座標（1〜3 の範囲を均等に分割）
+console.log("Firebase initialized.");
+
+// ===== Parameters =====
+const GRID_SIZE = 15;
+const POWER_P  = 2;        // IDW parameter
+const SIGMA = 0.7;         // Gaussian RBF parameter
+
+// ===== 現在の補間方式 ("idw" or "gauss") =====
+let currentMode = "idw";
+
+// ===== 最新センサーデータを保持 =====
+let latestSensorsList = [];
+
+// ===== ボタンによるモード切り替え =====
+document.getElementById("btnIDW").addEventListener("click", () => {
+  currentMode = "idw";
+  redraw();
+});
+
+document.getElementById("btnGAUSS").addEventListener("click", () => {
+  currentMode = "gauss";
+  redraw();
+});
+
+// ===== グリッド生成 =====
 function buildGridCoords() {
   const coords = [];
   for (let k = 0; k < GRID_SIZE; k++) {
-    const z = 1 + (k / (GRID_SIZE - 1)) * 2; // 1〜3
+    const z = 1 + (k / (GRID_SIZE - 1)) * 2;
     for (let j = 0; j < GRID_SIZE; j++) {
       const y = 1 + (j / (GRID_SIZE - 1)) * 2;
       for (let i = 0; i < GRID_SIZE; i++) {
@@ -42,7 +58,7 @@ function buildGridCoords() {
   return coords;
 }
 
-// IDW で 1点の温度を計算
+// ===== IDW補間 =====
 function idwTemperatureAtPoint(px, py, pz, sensors, power) {
   let num = 0;
   let den = 0;
@@ -53,32 +69,51 @@ function idwTemperatureAtPoint(px, py, pz, sensors, power) {
     const dz = pz - s.z;
     const distSq = dx * dx + dy * dy + dz * dz;
 
-    if (distSq === 0) {
-      // ちょうどセンサー位置ならその値をそのまま返す
-      return s.temp;
-    }
+    if (distSq === 0) return s.temp;
 
-    const w = 1 / Math.pow(distSq, power / 2.0); // (sqrt(d2))^p = d^p
+    const w = 1 / Math.pow(distSq, power / 2.0);
     num += w * s.temp;
     den += w;
   }
 
-  if (den === 0) return NaN;
-  return num / den;
+  return den === 0 ? NaN : num / den;
 }
 
-// ===== Firebase → Volume 可視化 =====
-onValue(sensorsRef, (snapshot) => {
-  const data = snapshot.val();
-  if (!data) {
-    console.log("No sensors data.");
-    return;
+// ===== Gaussian（RBF）補間 =====
+function gaussianTemperatureAtPoint(px, py, pz, sensors, sigma) {
+  let num = 0;
+  let den = 0;
+
+  const twoSigma2 = 2 * sigma * sigma;
+
+  for (const s of sensors) {
+    const dx = px - s.x;
+    const dy = py - s.y;
+    const dz = pz - s.z;
+
+    const dist2 = dx*dx + dy*dy + dz*dz;
+    const w = Math.exp(-dist2 / twoSigma2);
+
+    num += w * s.temp;
+    den += w;
   }
 
-  console.log("🔥 Firebase data:", data);
+  return den === 0 ? NaN : num / den;
+}
 
-  // ==== 1) 27個のセンサーを {x,y,z,temp} の配列にまとめる ====
-  // z: 1〜3, y:1〜3, x:1〜3 の整数座標
+// ===== モードに応じて補間方式を選ぶ =====
+function interpolate(x, y, z, sensors) {
+  if (currentMode === "idw") {
+    return idwTemperatureAtPoint(x, y, z, sensors, POWER_P);
+  }
+  return gaussianTemperatureAtPoint(x, y, z, sensors, SIGMA);
+}
+
+// ===== Firebase Listener =====
+onValue(sensorsRef, (snapshot) => {
+  const data = snapshot.val();
+  if (!data) return;
+
   const sensorsList = [];
 
   for (let z = 1; z <= 3; z++) {
@@ -93,60 +128,54 @@ onValue(sensorsRef, (snapshot) => {
         const xNode = yNode[`x${x}`];
         if (!xNode || xNode.temperature === undefined) continue;
 
-        const temp = parseFloat(xNode.temperature);
-        if (Number.isNaN(temp)) continue;
-
-        sensorsList.push({ x, y, z, temp });
+        sensorsList.push({
+          x, y, z,
+          temp: parseFloat(xNode.temperature)
+        });
       }
     }
   }
 
-  if (sensorsList.length === 0) {
-    console.log("No valid sensor values.");
-    return;
-  }
+  latestSensorsList = sensorsList;
+  redraw();
+});
 
-  console.log("Sensors list for IDW:", sensorsList);
+// ===== 描画関数 =====
+function redraw() {
+  if (latestSensorsList.length === 0) return;
 
-  // ==== 2) 3D グリッドを作り、IDW で各点の温度を計算 ====
   const coords = buildGridCoords();
-
-  const xs = [];
-  const ys = [];
-  const zs = [];
-  const values = [];
+  const xs = [], ys = [], zs = [], values = [];
 
   for (const p of coords) {
-    const t = idwTemperatureAtPoint(p.x, p.y, p.z, sensorsList, POWER_P);
-    if (Number.isNaN(t)) continue;
-
-    xs.push(p.x);
-    ys.push(p.y);
-    zs.push(p.z);
-    values.push(t);
+    const t = interpolate(p.x, p.y, p.z, latestSensorsList);
+    if (!Number.isNaN(t)) {
+      xs.push(p.x);  
+      ys.push(p.y);
+      zs.push(p.z);
+      values.push(t);
+    }
   }
 
-  console.log("Grid points:", xs.length);
-
-  // ==== 3) Plotly Volume で描画 ====
   const dataPlot = [{
     type: "volume",
     x: xs,
     y: ys,
     z: zs,
     value: values,
-    opacity: 0.15,
+    opacity: 0.18,
     surface: { count: 20 },
     colorscale: [
-      [0.0, "blue"],      // 低温
-      [0.5, "yellow"],    // 中間
-      [1.0, "red"]        // 高温
+      [0.0, "blue"],
+      [0.5, "yellow"],
+      [1.0, "red"]
     ],
-    reversescale: false
   }];
 
   const layout = {
-    title: "Beehive Temperature 3D Volume (IDW)",
+    title: currentMode === "idw"
+      ? "Beehive Temperature 3D Volume (IDW)"
+      : "Beehive Temperature 3D Volume (Gaussian)",
     scene: {
       xaxis: { title: "x", range: [1, 3] },
       yaxis: { title: "y", range: [1, 3] },
@@ -155,4 +184,4 @@ onValue(sensorsRef, (snapshot) => {
   };
 
   Plotly.newPlot("heatmap3d", dataPlot, layout);
-});
+}
