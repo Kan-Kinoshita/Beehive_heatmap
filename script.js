@@ -1,0 +1,32 @@
+// ===== Firebase SDK 読み込み =====
+
+// v9 モジュラーSDKを使う
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+// ===== あなたの firebaseConfig を貼る =====
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  databaseURL: "YOUR_DB_URL",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_BUCKET",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// Firebase初期化
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// ===== sensors ノードを読み取る =====
+const sensorsRef = ref(db, "sensors");
+
+onValue(sensorsRef, (snapshot) => {
+  const data = snapshot.val();
+  console.log("📡 Firebase更新を受信:", data);
+
+  // テストのため、画面に表示する
+  const out = document.getElementById("out");
+  out.textContent = JSON.stringify(data, null, 2);
+});
