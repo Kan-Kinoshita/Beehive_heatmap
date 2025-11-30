@@ -8,6 +8,7 @@ import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.
 const firebaseConfig = {
   apiKey: "AIzaSyBaEPr5uJFKlTsEAK2AxByxJ6IKSkfmDJ8",
   authDomain: "beehiveheatmap.firebaseapp.com",
+  databaseURL: "https://beehiveheatmap-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "beehiveheatmap",
   storageBucket: "beehiveheatmap.firebasestorage.app",
   messagingSenderId: "240823308650",
