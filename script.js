@@ -6,13 +6,12 @@ import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.
 
 // ===== あなたの firebaseConfig を貼る =====
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  databaseURL: "YOUR_DB_URL",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_BUCKET",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBaEPr5uJFKlTsEAK2AxByxJ6IKSkfmDJ8",
+  authDomain: "beehiveheatmap.firebaseapp.com",
+  projectId: "beehiveheatmap",
+  storageBucket: "beehiveheatmap.firebasestorage.app",
+  messagingSenderId: "240823308650",
+  appId: "1:240823308650:web:c3a052cb93d70009295513"
 };
 
 // Firebase初期化
