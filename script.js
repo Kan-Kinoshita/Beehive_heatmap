@@ -43,6 +43,17 @@ document.getElementById("btnGAUSS").addEventListener("click", () => {
   redraw();
 });
 
+// ===== 温度・湿度切り替え =====
+document.getElementById("btnTEMP").addEventListener("click", () => {
+  currentField = "temp";
+  redraw();
+});
+
+document.getElementById("btnHUMID").addEventListener("click", () => {
+  currentField = "humidity";
+  redraw();
+});
+
 // ===== グリッド生成 =====
 function buildGridCoords() {
   const coords = [];
@@ -80,6 +91,28 @@ function idwTemperatureAtPoint(px, py, pz, sensors, power) {
   return den === 0 ? NaN : num / den;
 }
 
+function idwHumidityAtPoint(px, py, pz, sensors, power) {
+  let num = 0;
+  let den = 0;
+
+  for (const s of sensors) {
+    if (s.humidity === null) continue;
+
+    const dx = px - s.x;
+    const dy = py - s.y;
+    const dz = pz - s.z;
+    const distSq = dx*dx + dy*dy + dz*dz;
+
+    if (distSq === 0) return s.humidity;
+
+    const w = 1 / Math.pow(distSq, power / 2.0);
+    num += w * s.humidity;
+    den += w;
+  }
+
+  return den === 0 ? NaN : num / den;
+}
+
 // ===== Gaussian（RBF）補間 =====
 function gaussianTemperatureAtPoint(px, py, pz, sensors, sigma) {
   let num = 0;
@@ -102,12 +135,43 @@ function gaussianTemperatureAtPoint(px, py, pz, sensors, sigma) {
   return den === 0 ? NaN : num / den;
 }
 
-// ===== モードに応じて補間方式を選ぶ =====
-function interpolate(x, y, z, sensors) {
-  if (currentMode === "idw") {
-    return idwTemperatureAtPoint(x, y, z, sensors, POWER_P);
+function gaussianHumidityAtPoint(px, py, pz, sensors, sigma) {
+  let num = 0;
+  let den = 0;
+
+  const twoSigma2 = 2 * sigma * sigma;
+
+  for (const s of sensors) {
+    if (s.humidity === null) continue;
+
+    const dx = px - s.x;
+    const dy = py - s.y;
+    const dz = pz - s.z;
+    const dist2 = dx*dx + dy*dy + dz*dz;
+
+    const w = Math.exp(-dist2 / twoSigma2);
+    num += w * s.humidity;
+    den += w;
   }
-  return gaussianTemperatureAtPoint(x, y, z, sensors, SIGMA);
+
+  return den === 0 ? NaN : num / den;
+}
+
+
+function interpolate(x, y, z, sensors) {
+  // 温度
+  if (currentField === "temp") {
+    return (currentMode === "idw")
+      ? idwTemperatureAtPoint(x, y, z, sensors, POWER_P)
+      : gaussianTemperatureAtPoint(x, y, z, sensors, SIGMA);
+  }
+
+  // 湿度
+  if (currentField === "humidity") {
+    return (currentMode === "idw")
+      ? idwHumidityAtPoint(x, y, z, sensors, POWER_P)
+      : gaussianHumidityAtPoint(x, y, z, sensors, SIGMA);
+  }
 }
 
 // ===== Firebase Listener =====
@@ -132,6 +196,7 @@ onValue(sensorsRef, (snapshot) => {
         sensorsList.push({
           x, y, z,
           temp: parseFloat(xNode.temperature)
+          humidity: xNode.humidity !== undefined ? parseFloat(xNode.humidity) : null
         });
       }
     }
@@ -174,9 +239,14 @@ function redraw() {
   }];
 
   const layout = {
-    title: currentMode === "idw"
-      ? "Beehive Temperature 3D Volume (IDW)"
-      : "Beehive Temperature 3D Volume (Gaussian)",
+    title: 
+      (currentField === "temp")
+        ? (currentMode === "idw"
+          ? "Temperature Heatmap (IDW)"
+          : "Temperature Heatmap (Gaussian)")
+        : (currentMode === "idw"
+          ? "Humidity Heatmap (IDW)"
+          : "Humidity Heatmap (Gaussian)"),
     scene: {
       xaxis: { title: "x", range: [1, 3] },
       yaxis: { title: "y", range: [1, 3] },
