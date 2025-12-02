@@ -79,10 +79,10 @@ function gauss(px, py, pz, sensors) {
     const dx = px - s.x, dy = py - s.y, dz = pz - s.z;
     const d2 = dx*dx + dy*dy + dz*dz;
     const w = Math.exp(-d2 / c);
+
     num += w * s.humidity;
     den += w;
   }
-
   return num / den;
 }
 
@@ -134,12 +134,19 @@ function redraw() {
     type: "volume",
     x: xs, y: ys, z: zs,
     value: vals,
-    opacity: 0.20,
-    surface: { count: 15 },
-    colorscale: "Viridis"
+    opacity: 0.24,
+    surface: { count: 20 },
+
+    // 湿度向けカラースケール（高湿度 = 赤, 低湿度 = 青）
+    colorscale: [
+      [0.0, "#0000ff"],   // blue (low humidity)
+      [0.33, "#00ff00"],  // green
+      [0.66, "#ffff00"],  // yellow
+      [1.0, "#ff0000"]    // red (high humidity)
+    ]
   }];
 
-  Plotly.newPlot("heatmap3d", dataPlot, {
+  Plotly.newPlot("humidity3d", dataPlot, {
     title: "Beehive Humidity 3D HeatMap (" + currentMode.toUpperCase() + ")",
     scene: {
       xaxis: { title: "x", range: [1,3] },
