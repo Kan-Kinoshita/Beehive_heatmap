@@ -6,16 +6,21 @@
 
   <!-- 最新 Plotly（推奨）-->
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-
   <style>
-    body { font-family: Arial, sans-serif; }
-    #heatmap3d { width: 100%; height: 650px; }
-    .btn { margin: 5px; padding: 8px 14px; }
+    button {
+      margin: 5px;
+      padding: 8px 16px;
+      font-size: 14px;
+    }
   </style>
 </head>
 
 <body>
   <h1>Beehive Humidity 3D Heatmap</h1>
+
+  <a href="index.html">
+    <button>Back to Temperature Map</button>
+  </a>
 
   <button id="btnIDW" class="btn">IDW</button>
   <button id="btnGAUSS" class="btn">Gaussian</button>
