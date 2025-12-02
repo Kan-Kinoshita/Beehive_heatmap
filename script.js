@@ -27,7 +27,6 @@ const SIGMA = 0.7;         // Gaussian RBF parameter
 
 // ===== 現在の補間方式 ("idw" or "gauss") =====
 let currentMode = "idw";
-let currentField = "temp";
 
 // ===== 最新センサーデータを保持 =====
 let latestSensorsList = [];
@@ -40,17 +39,6 @@ document.getElementById("btnIDW").addEventListener("click", () => {
 
 document.getElementById("btnGAUSS").addEventListener("click", () => {
   currentMode = "gauss";
-  redraw();
-});
-
-// ===== 温度・湿度切り替え =====
-document.getElementById("btnTEMP").addEventListener("click", () => {
-  currentField = "temp";
-  redraw();
-});
-
-document.getElementById("btnHUMID").addEventListener("click", () => {
-  currentField = "humidity";
   redraw();
 });
 
@@ -91,28 +79,6 @@ function idwTemperatureAtPoint(px, py, pz, sensors, power) {
   return den === 0 ? NaN : num / den;
 }
 
-function idwHumidityAtPoint(px, py, pz, sensors, power) {
-  let num = 0;
-  let den = 0;
-
-  for (const s of sensors) {
-    if (s.humidity === null) continue;
-
-    const dx = px - s.x;
-    const dy = py - s.y;
-    const dz = pz - s.z;
-    const distSq = dx*dx + dy*dy + dz*dz;
-
-    if (distSq === 0) return s.humidity;
-
-    const w = 1 / Math.pow(distSq, power / 2.0);
-    num += w * s.humidity;
-    den += w;
-  }
-
-  return den === 0 ? NaN : num / den;
-}
-
 // ===== Gaussian（RBF）補間 =====
 function gaussianTemperatureAtPoint(px, py, pz, sensors, sigma) {
   let num = 0;
@@ -135,43 +101,12 @@ function gaussianTemperatureAtPoint(px, py, pz, sensors, sigma) {
   return den === 0 ? NaN : num / den;
 }
 
-function gaussianHumidityAtPoint(px, py, pz, sensors, sigma) {
-  let num = 0;
-  let den = 0;
-
-  const twoSigma2 = 2 * sigma * sigma;
-
-  for (const s of sensors) {
-    if (s.humidity === null) continue;
-
-    const dx = px - s.x;
-    const dy = py - s.y;
-    const dz = pz - s.z;
-    const dist2 = dx*dx + dy*dy + dz*dz;
-
-    const w = Math.exp(-dist2 / twoSigma2);
-    num += w * s.humidity;
-    den += w;
-  }
-
-  return den === 0 ? NaN : num / den;
-}
-
-
+// ===== 補間方式の切り替え =====
 function interpolate(x, y, z, sensors) {
-  // 温度
-  if (currentField === "temp") {
-    return (currentMode === "idw")
-      ? idwTemperatureAtPoint(x, y, z, sensors, POWER_P)
-      : gaussianTemperatureAtPoint(x, y, z, sensors, SIGMA);
+  if (currentMode === "idw") {
+    return idwTemperatureAtPoint(x, y, z, sensors, POWER_P);
   }
-
-  // 湿度
-  if (currentField === "humidity") {
-    return (currentMode === "idw")
-      ? idwHumidityAtPoint(x, y, z, sensors, POWER_P)
-      : gaussianHumidityAtPoint(x, y, z, sensors, SIGMA);
-  }
+  return gaussianTemperatureAtPoint(x, y, z, sensors, SIGMA);
 }
 
 // ===== Firebase Listener =====
@@ -194,9 +129,10 @@ onValue(sensorsRef, (snapshot) => {
         if (!xNode || xNode.temperature === undefined) continue;
 
         sensorsList.push({
-          x, y, z,
+          x, 
+          y, 
+          z,
           temp: parseFloat(xNode.temperature)
-          humidity: xNode.humidity !== undefined ? parseFloat(xNode.humidity) : null
         });
       }
     }
@@ -239,14 +175,10 @@ function redraw() {
   }];
 
   const layout = {
-    title: 
-      (currentField === "temp")
-        ? (currentMode === "idw"
-          ? "Temperature Heatmap (IDW)"
-          : "Temperature Heatmap (Gaussian)")
-        : (currentMode === "idw"
-          ? "Humidity Heatmap (IDW)"
-          : "Humidity Heatmap (Gaussian)"),
+    title:
+      currentMode === "idw"
+        ? "Temperature Heatmap (IDW)"
+        : "Temperature Heatmap (Gaussian)",
     scene: {
       xaxis: { title: "x", range: [1, 3] },
       yaxis: { title: "y", range: [1, 3] },
