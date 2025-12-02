@@ -27,6 +27,7 @@ const SIGMA = 0.7;         // Gaussian RBF parameter
 
 // ===== 現在の補間方式 ("idw" or "gauss") =====
 let currentMode = "idw";
+let currentField = "temp";
 
 // ===== 最新センサーデータを保持 =====
 let latestSensorsList = [];
