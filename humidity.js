@@ -17,28 +17,40 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const sensorsRef = ref(db, "sensors");
-console.log("Firebase initialized (Humidity Map)");
+
+console.log("Firebase initialized (Absolute Humidity Model)");
 
 // ===== Parameters =====
 const GRID_SIZE = 15;
-const POWER_P  = 2;       // IDW exponent
-const SIGMA = 0.7;        // Gaussian RBF sigma
+const POWER_P  = 2;
+const SIGMA = 0.7;
 
-let currentMode = "idw";  // "idw" or "gauss"
-let latestSensors = [];   // humidity sensor list
+let currentMode = "idw";
+let latestSensors = []; // {x,y,z, temperature, RH, AH}
 
-// ===== Buttons =====
+// UI buttons
 document.getElementById("btnIDW").addEventListener("click", () => {
-  currentMode = "idw";
-  redraw();
+  currentMode = "idw"; redraw();
 });
-
 document.getElementById("btnGAUSS").addEventListener("click", () => {
-  currentMode = "gauss";
-  redraw();
+  currentMode = "gauss"; redraw();
 });
 
-// ===== Grid coordinates =====
+// ===== Absolute Humidity calculation =====
+function computeAbsoluteHumidity(T, RH) {
+  const rh = RH / 100;
+  const sat = 6.112 * Math.exp((17.67 * T) / (T + 243.5));
+  const AH = (sat * rh * 2.1674) / (273.15 + T);
+  return AH;
+}
+
+function AH_to_RH(AH, T) {
+  const sat = 6.112 * Math.exp((17.67 * T) / (T + 243.5));
+  const maxAH = (sat * 2.1674) / (273.15 + T);
+  return (AH / maxAH) * 100;
+}
+
+// ===== Grid =====
 function buildGrid() {
   const coords = [];
   for (let k = 0; k < GRID_SIZE; k++) {
@@ -54,54 +66,52 @@ function buildGrid() {
   return coords;
 }
 
-// ===== IDW interpolation =====
+// ===== IDW =====
 function idw(px, py, pz, sensors) {
   let num = 0, den = 0;
-
   for (const s of sensors) {
     const dx = px - s.x, dy = py - s.y, dz = pz - s.z;
     const d2 = dx*dx + dy*dy + dz*dz;
-    if (d2 === 0) return s.humidity;
-
+    if (d2 === 0) return s.AH;
     const w = 1 / Math.pow(d2, POWER_P / 2);
-    num += w * s.humidity;
+    num += w * s.AH;
     den += w;
   }
   return num / den;
 }
 
-// ===== Gaussian interpolation =====
+// ===== Gaussian =====
 function gauss(px, py, pz, sensors) {
-  let num = 0, den = 0;
   const c = 2 * SIGMA * SIGMA;
-
+  let num = 0, den = 0;
   for (const s of sensors) {
     const dx = px - s.x, dy = py - s.y, dz = pz - s.z;
     const d2 = dx*dx + dy*dy + dz*dz;
     const w = Math.exp(-d2 / c);
-
-    num += w * s.humidity;
+    num += w * s.AH;
     den += w;
   }
   return num / den;
 }
 
-// ===== Fetch humidity from Firebase =====
+// ===== Firebase =====
 onValue(sensorsRef, (snap) => {
   const data = snap.val();
   const list = [];
 
-  for (let z = 1; z <= 3; z++) {
-    for (let y = 1; y <= 3; y++) {
-      for (let x = 1; x <= 3; x++) {
+  for (let z=1; z<=3; z++) {
+    for (let y=1; y<=3; y++) {
+      for (let x=1; x<=3; x++) {
 
         const node = data?.[`z${z}`]?.[`y${y}`]?.[`x${x}`];
-        if (!node || node.humidity === undefined) continue;
+        if (!node || node.humidity === undefined || node.temperature === undefined) continue;
 
-        list.push({
-          x, y, z,
-          humidity: parseFloat(node.humidity)
-        });
+        const T = parseFloat(node.temperature);
+        const RH = parseFloat(node.humidity);
+
+        const AH = computeAbsoluteHumidity(T, RH);
+
+        list.push({ x, y, z, T, RH, AH });
       }
     }
   }
@@ -110,48 +120,47 @@ onValue(sensorsRef, (snap) => {
   redraw();
 });
 
-// ===== Draw =====
+// ===== DRAW =====
 function redraw() {
   if (latestSensors.length === 0) return;
 
-  const xs=[], ys=[], zs=[], vals=[];
   const coords = buildGrid();
+  const xs=[], ys=[], zs=[], vals=[];
 
   for (const p of coords) {
-    const v = (currentMode === "idw")
-      ? idw(p.x, p.y, p.z, latestSensors)
-      : gauss(p.x, p.y, p.z, latestSensors);
+    const AH = (currentMode === "idw")
+      ? idw(p.x,p.y,p.z,latestSensors)
+      : gauss(p.x,p.y,p.z,latestSensors);
 
-    if (!Number.isNaN(v)) {
-      xs.push(p.x);
-      ys.push(p.y);
-      zs.push(p.z);
-      vals.push(v);
-    }
+    // 補間した AH を各点の温度で RH に戻す
+    const T_here = 30; // ★必要なら温度マップから補完して置き換え可能
+    const RH_out = AH_to_RH(AH, T_here);
+
+    xs.push(p.x);
+    ys.push(p.y);
+    zs.push(p.z);
+    vals.push(RH_out);
   }
 
-  const dataPlot = [{
+  Plotly.newPlot("humidity3d", [{
     type: "volume",
     x: xs, y: ys, z: zs,
     value: vals,
-    opacity: 0.24,
+    opacity: 0.28,
     surface: { count: 20 },
-
-    // 湿度向けカラースケール（高湿度 = 赤, 低湿度 = 青）
     colorscale: [
-      [0.0, "#0000ff"],   // blue (low humidity)
-      [0.33, "#00ff00"],  // green
-      [0.66, "#ffff00"],  // yellow
-      [1.0, "#ff0000"]    // red (high humidity)
-    ]
-  }];
-
-  Plotly.newPlot("humidity3d", dataPlot, {
-    title: "Beehive Humidity 3D HeatMap (" + currentMode.toUpperCase() + ")",
+      [0.0, "#0000ff"],
+      [0.25, "#00ffff"],
+      [0.5, "#00ff00"],
+      [0.75, "#ffff00"],
+      [1.0, "#ff0000"]
+    ],
+  }], {
+    title: "Beehive Humidity 3D HeatMap (Absolute Humidity Model)",
     scene: {
-      xaxis: { title: "x", range: [1,3] },
-      yaxis: { title: "y", range: [1,3] },
-      zaxis: { title: "z", range: [1,3] },
+      xaxis:{title:"x", range:[1,3]},
+      yaxis:{title:"y", range:[1,3]},
+      zaxis:{title:"z", range:[1,3]},
     }
   });
 }
