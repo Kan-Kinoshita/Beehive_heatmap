@@ -4,9 +4,10 @@ import { initializeApp }
 import { getDatabase, ref, onValue } 
   from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-// ===== 共通補間ロジック =====
+// ★ 温度補間ロジックも humidity.js で再利用！
 import { buildGridCoords, idwInterpolate, gaussInterpolate }
   from "./interpolation.js";
+
 
 // ===== Firebase Config =====
 const firebaseConfig = {
@@ -26,28 +27,31 @@ const sensorsRef = ref(db, "sensors");
 
 console.log("Firebase initialized (Absolute Humidity Model)");
 
+
+// ===== Parameters =====
 const GRID_SIZE = 15;
-const POWER_P = 2;
+const POWER_P  = 2;
 const SIGMA = 0.7;
 
 let currentMode = "idw";
-let latestSensors = [];  // humidity sensor list
+let latestSensors = []; // {x,y,z, temperature, RH, AH}
 
-// ===== UI buttons =====
+
+// ===== UI Buttons =====
 document.getElementById("btnIDW").addEventListener("click", () => {
-  currentMode = "idw";
-  redraw();
+  currentMode = "idw"; redraw();
 });
 document.getElementById("btnGAUSS").addEventListener("click", () => {
-  currentMode = "gauss";
-  redraw();
+  currentMode = "gauss"; redraw();
 });
 
-// ===== AH calculation =====
+
+// ===== Absolute Humidity calculation =====
 function computeAbsoluteHumidity(T, RH) {
   const rh = RH / 100;
   const sat = 6.112 * Math.exp((17.67 * T) / (T + 243.5));
-  return (sat * rh * 2.1674) / (273.15 + T);
+  const AH = (sat * rh * 2.1674) / (273.15 + T);
+  return AH;
 }
 
 function AH_to_RH(AH, T) {
@@ -56,15 +60,25 @@ function AH_to_RH(AH, T) {
   return (AH / maxAH) * 100;
 }
 
-// ===== interpolation wrapper =====
-function interpolateAH(x, y, z, sensors) {
+
+// ===== 補間ロジック（AH用） =====
+function interpolate_AH(x, y, z, sensors) {
   if (currentMode === "idw") {
     return idwInterpolate(x, y, z, sensors, "AH", POWER_P);
   }
   return gaussInterpolate(x, y, z, sensors, "AH", SIGMA);
 }
 
-// ===== Firebase Listener =====
+// ★ 温度補間ロジック（TemperatureMap と同じ）
+function interpolate_Temp(x, y, z, sensors) {
+  if (currentMode === "idw") {
+    return idwInterpolate(x, y, z, sensors, "T", POWER_P);
+  }
+  return gaussInterpolate(x, y, z, sensors, "T", SIGMA);
+}
+
+
+// ===== Firebase Fetch =====
 onValue(sensorsRef, (snap) => {
   const data = snap.val();
   const list = [];
@@ -72,14 +86,16 @@ onValue(sensorsRef, (snap) => {
   for (let z=1; z<=3; z++) {
     for (let y=1; y<=3; y++) {
       for (let x=1; x<=3; x++) {
-        const node = data?.[`z${z}`]?.[`y${y}`]?.[`x${x}`];
-        if (!node || node.humidity === undefined || node.temperature === undefined)
-          continue;
 
-        const T = parseFloat(node.temperature);
+        const node = data?.[`z${z}`]?.[`y${y}`]?.[`x${x}`];
+        if (!node || node.humidity === undefined || node.temperature === undefined) continue;
+
+        const T  = parseFloat(node.temperature);
         const RH = parseFloat(node.humidity);
+
         const AH = computeAbsoluteHumidity(T, RH);
 
+        // AH と 温度 どちらも保存
         list.push({ x, y, z, T, RH, AH });
       }
     }
@@ -89,18 +105,24 @@ onValue(sensorsRef, (snap) => {
   redraw();
 });
 
+
 // ===== DRAW =====
 function redraw() {
   if (latestSensors.length === 0) return;
 
   const coords = buildGridCoords(GRID_SIZE);
-  const xs = [], ys = [], zs = [], vals = [];
+  const xs=[], ys=[], zs=[], vals=[];
 
   for (const p of coords) {
-    const AH = interpolateAH(p.x, p.y, p.z, latestSensors);
 
-    const T_here = 30;  // TODO: ここはあとで温度補間値に置き換える
-    const RH_out = AH_to_RH(AH, T_here);
+    // ① AH を補間
+    const AH_interp = interpolate_AH(p.x, p.y, p.z, latestSensors);
+
+    // ② 温度（T）も補間 ★これが重要！！！
+    const T_interp = interpolate_Temp(p.x, p.y, p.z, latestSensors);
+
+    // ③ AH と T_interp から RH を計算
+    const RH_out = AH_to_RH(AH_interp, T_interp);
 
     xs.push(p.x);
     ys.push(p.y);
@@ -112,7 +134,7 @@ function redraw() {
     type: "volume",
     x: xs, y: ys, z: zs,
     value: vals,
-    opacity: 0.28,
+    opacity: 0.30,
     surface: { count: 20 },
     colorscale: [
       [0.0, "#0000ff"],
@@ -122,7 +144,7 @@ function redraw() {
       [1.0, "#ff0000"]
     ],
   }], {
-    title: "Beehive Humidity 3D HeatMap",
+    title: "Beehive Humidity 3D HeatMap (Absolute Humidity Model)",
     scene: {
       xaxis:{title:"x", range:[1,3]},
       yaxis:{title:"y", range:[1,3]},
