@@ -1,6 +1,10 @@
 // ===== Firebase SDK =====
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+import { initializeApp } 
+  from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import { getDatabase, ref, onValue } 
+  from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+import { buildGridCoords, idwInterpolate, gaussInterpolate }
+  from "./interpolation.js";
 
 // ===== Firebase Config =====
 const firebaseConfig = {
@@ -42,72 +46,14 @@ document.getElementById("btnGAUSS").addEventListener("click", () => {
   redraw();
 });
 
-// ===== グリッド生成 =====
-function buildGridCoords() {
-  const coords = [];
-  for (let k = 0; k < GRID_SIZE; k++) {
-    const z = 1 + (k / (GRID_SIZE - 1)) * 2;
-    for (let j = 0; j < GRID_SIZE; j++) {
-      const y = 1 + (j / (GRID_SIZE - 1)) * 2;
-      for (let i = 0; i < GRID_SIZE; i++) {
-        const x = 1 + (i / (GRID_SIZE - 1)) * 2;
-        coords.push({ x, y, z });
-      }
-    }
-  }
-  return coords;
-}
-
-// ===== IDW補間 =====
-function idwTemperatureAtPoint(px, py, pz, sensors, power) {
-  let num = 0;
-  let den = 0;
-
-  for (const s of sensors) {
-    const dx = px - s.x;
-    const dy = py - s.y;
-    const dz = pz - s.z;
-    const distSq = dx * dx + dy * dy + dz * dz;
-
-    if (distSq === 0) return s.temp;
-
-    const w = 1 / Math.pow(distSq, power / 2.0);
-    num += w * s.temp;
-    den += w;
-  }
-
-  return den === 0 ? NaN : num / den;
-}
-
-// ===== Gaussian（RBF）補間 =====
-function gaussianTemperatureAtPoint(px, py, pz, sensors, sigma) {
-  let num = 0;
-  let den = 0;
-
-  const twoSigma2 = 2 * sigma * sigma;
-
-  for (const s of sensors) {
-    const dx = px - s.x;
-    const dy = py - s.y;
-    const dz = pz - s.z;
-
-    const dist2 = dx*dx + dy*dy + dz*dz;
-    const w = Math.exp(-dist2 / twoSigma2);
-
-    num += w * s.temp;
-    den += w;
-  }
-
-  return den === 0 ? NaN : num / den;
-}
-
-// ===== 補間方式の切り替え =====
+//GaussianとIDWを呼び出す
 function interpolate(x, y, z, sensors) {
   if (currentMode === "idw") {
-    return idwTemperatureAtPoint(x, y, z, sensors, POWER_P);
+    return idwInterpolate(x, y, z, sensors, "temp", POWER_P);
   }
-  return gaussianTemperatureAtPoint(x, y, z, sensors, SIGMA);
+  return gaussInterpolate(x, y, z, sensors, "temp", SIGMA);
 }
+
 
 // ===== Firebase Listener =====
 onValue(sensorsRef, (snapshot) => {
