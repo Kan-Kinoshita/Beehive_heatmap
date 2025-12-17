@@ -98,12 +98,16 @@ function redraw() {
 
   for (const p of coords) {
     const t = interpolate(p.x, p.y, p.z, latestSensorsList);
-    if (!Number.isNaN(t)) {
-      xs.push(p.x);  
-      ys.push(p.y);
-      zs.push(p.z);
-      values.push(t);
-    }
+
+    if (!Number.isFinite(t)) continue;
+
+    // ★ 物理レンジでクリップ（表示用）
+    const clipped = Math.max(0, Math.min(40, t));
+
+    xs.push(p.x);
+    ys.push(p.y);
+    zs.push(p.z);
+    values.push(clipped);
   }
 
   const vmin = Math.min(...values);
