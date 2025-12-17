@@ -1,7 +1,7 @@
 // ===== Firebase SDK =====
-import { initializeApp } 
+import { initializeApp }
   from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-import { getDatabase, ref, onValue } 
+import { getDatabase, ref, onValue }
   from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 import { buildGridCoords, idwInterpolate, gaussInterpolate }
   from "./interpolation.js";
@@ -26,8 +26,8 @@ console.log("Firebase initialized.");
 
 // ===== Parameters =====
 const GRID_SIZE = 15;
-const POWER_P = 2;
-const SIGMA = 0.7;
+const POWER_P = 2;   // IDW parameter
+const SIGMA = 0.7;   // Gaussian RBF parameter
 
 // ===== 現在の補間方式 =====
 let currentMode = "idw";
@@ -35,17 +35,18 @@ let currentMode = "idw";
 // ===== 最新センサーデータ =====
 let latestSensorsList = [];
 
-// ===== モード切替 =====
+// ===== ボタンによるモード切り替え =====
 document.getElementById("btnIDW").addEventListener("click", () => {
   currentMode = "idw";
   redraw();
 });
+
 document.getElementById("btnGAUSS").addEventListener("click", () => {
   currentMode = "gauss";
   redraw();
 });
 
-// ===== 補間 =====
+// ===== 補間関数 =====
 function interpolate(x, y, z, sensors) {
   if (currentMode === "idw") {
     return idwInterpolate(x, y, z, sensors, "temp", POWER_P);
@@ -72,10 +73,12 @@ onValue(sensorsRef, (snapshot) => {
         const xNode = yNode[`x${x}`];
         if (!xNode || xNode.temperature === undefined) continue;
 
-        const t = parseFloat(xNode.temperature);
-        if (!Number.isFinite(t)) continue;
-
-        sensorsList.push({ x, y, z, temp: t });
+        sensorsList.push({
+          x,
+          y,
+          z,
+          temp: parseFloat(xNode.temperature)
+        });
       }
     }
   }
@@ -84,7 +87,7 @@ onValue(sensorsRef, (snapshot) => {
   redraw();
 });
 
-// ===== 描画 =====
+// ===== 描画関数 =====
 function redraw() {
   if (latestSensorsList.length === 0) return;
 
@@ -93,12 +96,12 @@ function redraw() {
 
   for (const p of coords) {
     const t = interpolate(p.x, p.y, p.z, latestSensorsList);
-    if (!Number.isFinite(t)) continue;
-
-    xs.push(p.x);
-    ys.push(p.y);
-    zs.push(p.z);
-    values.push(t);
+    if (!Number.isNaN(t)) {
+      xs.push(p.x);
+      ys.push(p.y);
+      zs.push(p.z);
+      values.push(t);
+    }
   }
 
   const dataPlot = [{
@@ -107,13 +110,24 @@ function redraw() {
     y: ys,
     z: zs,
     value: values,
-    opacity: 0.18,
-    surface: { count: 20 },
+
+    isomin: 0,
+    isomax: 40,
+
+    opacity: 0.2,
+    surface: { count: 30 },
+
     colorscale: [
       [0.0, "blue"],
       [0.5, "yellow"],
       [1.0, "red"]
-    ]
+    ],
+
+    colorbar: {
+      title: "Temperature (°C)",
+      tick0: 0,
+      dtick: 5
+    }
   }];
 
   const layout = {
