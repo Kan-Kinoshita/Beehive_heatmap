@@ -26,35 +26,32 @@ console.log("Firebase initialized.");
 
 // ===== Parameters =====
 const GRID_SIZE = 15;
-const POWER_P  = 2;        // IDW parameter
-const SIGMA = 0.7;         // Gaussian RBF parameter
+const POWER_P = 2;
+const SIGMA = 0.7;
 
-
-// ===== 現在の補間方式 ("idw" or "gauss") =====
+// ===== 現在の補間方式 =====
 let currentMode = "idw";
 
-// ===== 最新センサーデータを保持 =====
+// ===== 最新センサーデータ =====
 let latestSensorsList = [];
 
-// ===== ボタンによるモード切り替え =====
+// ===== モード切替 =====
 document.getElementById("btnIDW").addEventListener("click", () => {
   currentMode = "idw";
   redraw();
 });
-
 document.getElementById("btnGAUSS").addEventListener("click", () => {
   currentMode = "gauss";
   redraw();
 });
 
-//GaussianとIDWを呼び出す
+// ===== 補間 =====
 function interpolate(x, y, z, sensors) {
   if (currentMode === "idw") {
     return idwInterpolate(x, y, z, sensors, "temp", POWER_P);
   }
   return gaussInterpolate(x, y, z, sensors, "temp", SIGMA);
 }
-
 
 // ===== Firebase Listener =====
 onValue(sensorsRef, (snapshot) => {
@@ -75,12 +72,10 @@ onValue(sensorsRef, (snapshot) => {
         const xNode = yNode[`x${x}`];
         if (!xNode || xNode.temperature === undefined) continue;
 
-        sensorsList.push({
-          x, 
-          y, 
-          z,
-          temp: parseFloat(xNode.temperature)
-        });
+        const t = parseFloat(xNode.temperature);
+        if (!Number.isFinite(t)) continue;
+
+        sensorsList.push({ x, y, z, temp: t });
       }
     }
   }
@@ -89,55 +84,37 @@ onValue(sensorsRef, (snapshot) => {
   redraw();
 });
 
-// ===== 描画関数 =====
+// ===== 描画 =====
 function redraw() {
   if (latestSensorsList.length === 0) return;
 
-  const coords = buildGridCoords();
+  const coords = buildGridCoords(GRID_SIZE);
   const xs = [], ys = [], zs = [], values = [];
 
   for (const p of coords) {
     const t = interpolate(p.x, p.y, p.z, latestSensorsList);
-
     if (!Number.isFinite(t)) continue;
-
-    // ★ 物理レンジでクリップ（表示用）
-    const clipped = Math.max(0, Math.min(40, t));
 
     xs.push(p.x);
     ys.push(p.y);
     zs.push(p.z);
-    values.push(clipped);
+    values.push(t);
   }
-
-  const vmin = Math.min(...values);
-  const vmax = Math.max(...values);
 
   const dataPlot = [{
-  type: "volume",
-  x: xs,
-  y: ys,
-  z: zs,
-  value: values,
-
-  isomin: 0,
-  isomax: 40,
-
-  opacity: 0.2,
-  surface: { count: 30 },
-
-  colorscale: [
-    [0.0, "blue"],
-    [0.5, "yellow"],
-    [1.0, "red"]
-  ],
-
-  colorbar: {
-    title: "Temperature (°C)",
-    tick0: 0,
-    dtick: 5
-  }
-}];
+    type: "volume",
+    x: xs,
+    y: ys,
+    z: zs,
+    value: values,
+    opacity: 0.18,
+    surface: { count: 20 },
+    colorscale: [
+      [0.0, "blue"],
+      [0.5, "yellow"],
+      [1.0, "red"]
+    ]
+  }];
 
   const layout = {
     title:
