@@ -28,9 +28,7 @@ console.log("Firebase initialized.");
 const GRID_SIZE = 15;
 const POWER_P  = 2;        // IDW parameter
 const SIGMA = 0.7;         // Gaussian RBF parameter
-
-const vmin = Math.min(...values);
-const vmax = Math.max(...values);
+㉿
 
 // ===== 現在の補間方式 ("idw" or "gauss") =====
 let currentMode = "idw";
@@ -107,6 +105,9 @@ function redraw() {
       values.push(t);
     }
   }
+
+  const vmin = Math.min(...values);
+  const vmax = Math.max(...values);
 
   const dataPlot = [{
     type: "volume",
