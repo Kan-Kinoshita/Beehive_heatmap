@@ -110,24 +110,30 @@ function redraw() {
   const vmax = Math.max(...values);
 
   const dataPlot = [{
-    type: "volume",
-    x: xs,
-    y: ys,
-    z: zs,
-    value: values,
+  type: "volume",
+  x: xs,
+  y: ys,
+  z: zs,
+  value: values,
 
-    isomin: vmin,
-    isomax: vmax,
+  isomin: 0,
+  isomax: 40,
 
-    opacity: 0.25,
-    surface: { count: 20 },
+  opacity: 0.2,
+  surface: { count: 30 },
 
-    colorscale: [
-      [0.0, "blue"],
-      [0.5, "yellow"],
-      [1.0, "red"]
-    ],
-  }];
+  colorscale: [
+    [0.0, "blue"],
+    [0.5, "yellow"],
+    [1.0, "red"]
+  ],
+
+  colorbar: {
+    title: "Temperature (°C)",
+    tick0: 0,
+    dtick: 5
+  }
+}];
 
   const layout = {
     title:
